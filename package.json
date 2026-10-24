@@ -1,0 +1,14 @@
+{
+  "name": "url-shortener-project",
+  "version": "1.0.0",
+  "description": "Full-stack URL Shortener with Analytics Dashboard",
+  "private": true,
+  "scripts": {
+    "start": "npm run --prefix backend start",
+    "dev:backend": "npm run --prefix backend dev",
+    "dev:frontend": "npm run --prefix frontend dev",
+    "test": "npm run --prefix backend test",
+    "lint": "npm run --prefix frontend lint",
+    "build": "npm run --prefix frontend build"
+  }
+}
