@@ -33,6 +33,9 @@
 :root {
   /* void — primary background. Pure black, never a dark gray. */
   --bg-primary: #000000;
+  /* Tell the browser to render built-in controls (date/time calendars,
+     select dropdowns, scrollbars) with the dark UI. */
+  color-scheme: dark;
   /* surface — first elevation: panels, cards, status bars. */
   --bg-secondary: #101010;
   /* surface-alt — second elevation: popups, widgets, hover menus. */
@@ -235,6 +238,27 @@ body {
 
 .input-field::placeholder {
   color: var(--text-dim);
+}
+
+/* Native datetime-local calendar picker — keep the browser's built-in
+   picker but theme its chrome to match ElectroVoid. */
+.input-field[type='datetime-local'] {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color-scheme: dark; /* dark native calendar popups + visible picker icon */
+}
+
+.input-field[type='datetime-local']::-webkit-calendar-picker-indicator {
+  /* The icon is a built-in SVG image, so tone it down with opacity and
+     boost it on hover instead of trying to re-fill it. */
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.input-field[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px var(--accent));
 }
 
 .options-row {

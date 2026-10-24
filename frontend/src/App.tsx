@@ -341,6 +341,12 @@ export default function App() {
                 className="input-field"
                 value={expiresAt}
                 onChange={(e) => setExpiresAt(e.target.value)}
+                onClick={(e) => {
+                  // Open the native calendar picker on full-field click.
+                  if ('showPicker' in e.currentTarget) {
+                    try { e.currentTarget.showPicker(); } catch { /* Browser blocked it — user can use the native icon. */ }
+                  }
+                }}
               />
             </div>
           </div>
