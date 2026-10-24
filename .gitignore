@@ -4,3 +4,4 @@ dist/
 .mongo-data/
 *.log
 .DS_Store
+.agents/

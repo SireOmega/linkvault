@@ -1,21 +1,24 @@
 process.env.NODE_ENV = 'test';
-const test = require('node:test');
-const assert = require('node:assert');
-const { app, startServer, cleanup, Url } = require('../server');
+import test from 'node:test';
+import assert from 'node:assert';
+import type { Server } from 'http';
+import type { AddressInfo } from 'net';
+import { startServer, cleanup, Url } from '../src/server';
 
-let server;
-let baseUrl;
+let server: Server;
+let baseUrl: string;
 
 test.before(async () => {
   server = await startServer(0); // ephemeral port
-  const port = server.address().port;
+  const address = server.address() as AddressInfo;
+  const port = address.port;
   baseUrl = `http://127.0.0.1:${port}`;
   await Url.deleteMany({});
 });
 
 test.after(async () => {
   if (server) {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
   await cleanup();
 });
@@ -23,7 +26,7 @@ test.after(async () => {
 test('GET /api/health should return ok', async () => {
   const res = await fetch(`${baseUrl}/api/health`);
   assert.strictEqual(res.status, 200);
-  const data = await res.json();
+  const data = (await res.json()) as { status: string; dbConnected: boolean };
   assert.strictEqual(data.status, 'ok');
   assert.strictEqual(data.dbConnected, true);
 });
@@ -35,7 +38,7 @@ test('POST /api/shorten rejects empty URL', async () => {
     body: JSON.stringify({}),
   });
   assert.strictEqual(res.status, 400);
-  const data = await res.json();
+  const data = (await res.json()) as { error: string };
   assert.match(data.error, /URL is required/i);
 });
 
@@ -46,7 +49,7 @@ test('POST /api/shorten rejects invalid URL', async () => {
     body: JSON.stringify({ originalUrl: 'not a url' }),
   });
   assert.strictEqual(res.status, 400);
-  const data = await res.json();
+  const data = (await res.json()) as { error: string };
   assert.match(data.error, /invalid url/i);
 });
 
@@ -57,7 +60,12 @@ test('POST /api/shorten generates short link with prepended https protocol', asy
     body: JSON.stringify({ originalUrl: 'example.com' }),
   });
   assert.strictEqual(res.status, 201);
-  const data = await res.json();
+  const data = (await res.json()) as {
+    originalUrl: string;
+    shortCode: string;
+    shortUrl: string;
+    clicks: number;
+  };
   assert.strictEqual(data.originalUrl, 'https://example.com/');
   assert.ok(data.shortCode);
   assert.ok(data.shortUrl);
@@ -74,7 +82,7 @@ test('POST /api/shorten accepts custom code', async () => {
     }),
   });
   assert.strictEqual(res.status, 201);
-  const data = await res.json();
+  const data = (await res.json()) as { shortCode: string };
   assert.strictEqual(data.shortCode, 'my-custom-git');
 });
 
@@ -88,7 +96,7 @@ test('POST /api/shorten rejects duplicate custom code', async () => {
     }),
   });
   assert.strictEqual(res.status, 409);
-  const data = await res.json();
+  const data = (await res.json()) as { error: string };
   assert.match(data.error, /already taken/i);
 });
 
@@ -102,14 +110,14 @@ test('POST /api/shorten rejects reserved keywords', async () => {
     }),
   });
   assert.strictEqual(res.status, 400);
-  const data = await res.json();
+  const data = (await res.json()) as { error: string };
   assert.match(data.error, /reserved/i);
 });
 
 test('GET /api/links returns all shortened links', async () => {
   const res = await fetch(`${baseUrl}/api/links`);
   assert.strictEqual(res.status, 200);
-  const links = await res.json();
+  const links = (await res.json()) as unknown[];
   assert.ok(Array.isArray(links));
   assert.ok(links.length >= 2);
 });
@@ -123,7 +131,7 @@ test('GET /:shortCode redirects and increments click count', async () => {
 
   // Verify click count incremented
   const doc = await Url.findOne({ shortCode: 'my-custom-git' });
-  assert.strictEqual(doc.clicks, 1);
+  assert.strictEqual(doc?.clicks, 1);
 });
 
 test('GET /:shortCode returns 410 when expired', async () => {
@@ -143,6 +151,7 @@ test('GET /:shortCode returns 410 when expired', async () => {
 
 test('DELETE /api/links/:id removes link', async () => {
   const doc = await Url.findOne({ shortCode: 'expired1' });
+  assert.ok(doc);
   const res = await fetch(`${baseUrl}/api/links/${doc._id}`, {
     method: 'DELETE',
   });

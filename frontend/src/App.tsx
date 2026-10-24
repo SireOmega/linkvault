@@ -1,24 +1,25 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import axios from 'axios';
+import type { LinkItem, BackendStatus, ShortenPayload } from './types';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || 'http://localhost:5000';
 
 export default function App() {
-  const [originalUrl, setOriginalUrl] = useState('');
-  const [customCode, setCustomCode] = useState('');
-  const [expiresAt, setExpiresAt] = useState('');
-  const [links, setLinks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [backendStatus, setBackendStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
-  const [errorMessage, setErrorMessage] = useState('');
-  const [createdLink, setCreatedLink] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [originalUrl, setOriginalUrl] = useState<string>('');
+  const [customCode, setCustomCode] = useState<string>('');
+  const [expiresAt, setExpiresAt] = useState<string>('');
+  const [links, setLinks] = useState<LinkItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [createdLink, setCreatedLink] = useState<LinkItem | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Fetch all links and health
-  const refreshLinks = async () => {
+  const refreshLinks = async (): Promise<void> => {
     try {
-      const res = await axios.get(`${API_BASE}/api/links`);
+      const res = await axios.get<LinkItem[]>(`${API_BASE}/api/links`);
       setLinks(Array.isArray(res.data) ? res.data : []);
       setBackendStatus('online');
     } catch {
@@ -32,8 +33,8 @@ export default function App() {
     async function loadInitialData() {
       try {
         const [healthRes, linksRes] = await Promise.all([
-          axios.get(`${API_BASE}/api/health`, { timeout: 3000 }).catch(() => null),
-          axios.get(`${API_BASE}/api/links`).catch(() => ({ data: [] })),
+          axios.get<{ status: string }>(`${API_BASE}/api/health`, { timeout: 3000 }).catch(() => null),
+          axios.get<LinkItem[]>(`${API_BASE}/api/links`).catch(() => ({ data: [] as LinkItem[] })),
         ]);
 
         if (isCancelled) return;
@@ -62,7 +63,7 @@ export default function App() {
   }, []);
 
   // Handle URL Shortening
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!originalUrl.trim()) return;
 
@@ -70,21 +71,25 @@ export default function App() {
     setErrorMessage('');
 
     try {
-      const payload = {
+      const payload: ShortenPayload = {
         originalUrl: originalUrl.trim(),
         customCode: customCode.trim() || undefined,
         expiresAt: expiresAt || null,
       };
 
-      const res = await axios.post(`${API_BASE}/api/shorten`, payload);
+      const res = await axios.post<LinkItem>(`${API_BASE}/api/shorten`, payload);
       setCreatedLink(res.data);
       setOriginalUrl('');
       setCustomCode('');
       setExpiresAt('');
       await refreshLinks();
-    } catch (err) {
-      const serverMsg = err.response?.data?.error;
-      const fallbackMsg = err.message || 'Failed to shorten URL. Make sure the backend is running.';
+    } catch (err: unknown) {
+      let serverMsg = '';
+      let fallbackMsg = 'Failed to shorten URL. Make sure the backend is running.';
+      if (axios.isAxiosError(err)) {
+        serverMsg = (err.response?.data as { error?: string } | undefined)?.error || '';
+        fallbackMsg = err.message || fallbackMsg;
+      }
       setErrorMessage(serverMsg || fallbackMsg);
     } finally {
       setLoading(false);
@@ -92,7 +97,7 @@ export default function App() {
   };
 
   // Copy to clipboard helper
-  const handleCopy = async (text, id) => {
+  const handleCopy = async (text: string, id: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
@@ -111,7 +116,7 @@ export default function App() {
   };
 
   // Delete a link
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string): Promise<void> => {
     if (!window.confirm('Are you sure you want to delete this short link?')) return;
     try {
       await axios.delete(`${API_BASE}/api/links/${id}`);
@@ -119,8 +124,12 @@ export default function App() {
         setCreatedLink(null);
       }
       await refreshLinks();
-    } catch (err) {
-      alert(err.response?.data?.error || 'Failed to delete link');
+    } catch (err: unknown) {
+      let msg = 'Failed to delete link';
+      if (axios.isAxiosError(err)) {
+        msg = (err.response?.data as { error?: string } | undefined)?.error || msg;
+      }
+      alert(msg);
     }
   };
 
@@ -277,7 +286,7 @@ export default function App() {
             <span className="success-link-text">{createdLink.shortUrl}</span>
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => handleCopy(createdLink.shortUrl, 'banner')}
+              onClick={() => handleCopy(createdLink.shortUrl || '', 'banner')}
             >
               {copiedId === 'banner' ? '✓ Copied!' : 'Copy Link'}
             </button>
@@ -341,7 +350,7 @@ export default function App() {
             <tbody>
               {filteredLinks.length === 0 ? (
                 <tr>
-                  <td colSpan="6">
+                  <td colSpan={6}>
                     <div className="empty-state">
                       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
                         <circle cx="12" cy="12" r="10" />
