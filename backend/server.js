@@ -24,42 +24,42 @@ const Url = mongoose.model('Url', urlSchema);
 let mongodInstance = null;
 
 // Connect to MongoDB (with automatic embedded fallback)
-async function connectDB() {
+async function connectDB(options = {}) {
   let uri = process.env.MONGO_URI ? process.env.MONGO_URI.trim() : '';
   const isPlaceholder = !uri || uri === 'your_mongodb_connection_string' || !/^mongodb(\+srv)?:\/\//i.test(uri);
 
   if (isPlaceholder) {
-    console.log('No valid MONGO_URI specified. Starting embedded MongoDB database...');
-    const dbPath = path.join(__dirname, '.mongo-data');
-    if (!fs.existsSync(dbPath)) {
-      fs.mkdirSync(dbPath, { recursive: true });
-    }
-    mongodInstance = await MongoMemoryServer.create({
-      instance: {
-        dbPath,
-        storageEngine: 'wiredTiger',
-      },
-    });
-    uri = mongodInstance.getUri();
-  }
-
-  try {
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-    console.log(`Connected to MongoDB (${isPlaceholder ? 'Embedded local instance' : 'External URI'})`);
-  } catch (err) {
-    console.error('Failed to connect to primary MongoDB:', err.message);
-    if (!mongodInstance) {
-      console.log('Falling back to embedded MongoDB...');
+    const isTest = process.env.NODE_ENV === 'test' || options.isTest;
+    const instanceConfig = {};
+    if (!isTest) {
       const dbPath = path.join(__dirname, '.mongo-data');
       if (!fs.existsSync(dbPath)) {
         fs.mkdirSync(dbPath, { recursive: true });
       }
+      instanceConfig.dbPath = dbPath;
+      instanceConfig.storageEngine = 'wiredTiger';
+    }
+
+    try {
       mongodInstance = await MongoMemoryServer.create({
-        instance: {
-          dbPath,
-          storageEngine: 'wiredTiger',
-        },
+        instance: instanceConfig,
       });
+      uri = mongodInstance.getUri();
+    } catch {
+      console.log('Database directory in use or locked. Falling back to fresh in-memory MongoDB instance...');
+      mongodInstance = await MongoMemoryServer.create();
+      uri = mongodInstance.getUri();
+    }
+  }
+
+  try {
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+    console.log(`Connected to MongoDB (${isPlaceholder ? 'Embedded instance' : 'External URI'})`);
+  } catch (err) {
+    console.error('Failed to connect to primary MongoDB:', err.message);
+    if (!mongodInstance) {
+      console.log('Falling back to embedded MongoDB...');
+      mongodInstance = await MongoMemoryServer.create();
       await mongoose.connect(mongodInstance.getUri());
       console.log('Connected to fallback embedded MongoDB');
     } else {
