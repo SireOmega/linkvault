@@ -5,6 +5,93 @@ import type { LinkItem, BackendStatus, ShortenPayload } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || 'http://localhost:5000';
 
+/* --- Inline icons (lucide-style, stroke-based) ------------------------- */
+
+const IconLink = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
+);
+
+const IconHistory = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M12 7v5l4 2" />
+  </svg>
+);
+
+const IconPanelClose = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+    <path d="m16 15-3-3 3-3" />
+  </svg>
+);
+
+const IconCopy = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+const IconCheck = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const IconQr = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+  </svg>
+);
+
+const IconTrash = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+const IconClose = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+
+const IconDownload = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+/* --- Helpers ------------------------------------------------------------ */
+
+/** Compact relative timestamp for history rows ("just now", "12m", "3d"). */
+const timeAgo = (iso?: string): string => {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '—';
+  const diff = Date.now() - t;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+};
+
 export default function App() {
   const [originalUrl, setOriginalUrl] = useState<string>('');
   const [customCode, setCustomCode] = useState<string>('');
@@ -19,6 +106,7 @@ export default function App() {
   const [qrModalLink, setQrModalLink] = useState<LinkItem | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrGenerating, setQrGenerating] = useState<boolean>(false);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
 
   const openQrModal = (link: LinkItem) => {
     setQrModalLink(link);
@@ -255,297 +343,268 @@ export default function App() {
   }, [links, searchQuery]);
 
   return (
-    <div className="container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="brand">
-          <div className="brand-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
+    <div className="app-shell">
+      {/* ============ Main pane — utilitarian shortener ============ */}
+      <main className="main-pane">
+        <header className="main-header">
+          <div className="brand">
+            <div className="brand-icon"><IconLink /></div>
+            <div className="brand-text">
+              <h1>Link Vault</h1>
+              <p>URL Shortener &amp; Analytics</p>
+            </div>
           </div>
-          <div className="brand-text">
-            <h1>Link Vault</h1>
-            <p>High-performance URL Shortener & Analytics</p>
+
+          <div className="header-actions">
+            <div className="system-status">
+              <span className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} />
+              <span>
+                {backendStatus === 'online'
+                  ? 'Connected'
+                  : backendStatus === 'checking'
+                    ? 'Connecting…'
+                    : 'Backend Offline'}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-outline history-toggle"
+              onClick={() => setHistoryOpen((o) => !o)}
+              aria-expanded={historyOpen}
+              aria-controls="history-sidebar"
+              title={historyOpen ? 'Hide history' : 'Show history'}
+            >
+              <IconHistory />
+              History
+              <span className="history-tag">{links.length}</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="shortener-pane">
+          <div className="shortener-block">
+            {errorMessage && (
+              <div className="alert alert-danger" role="alert">
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <form className="shortener-form" onSubmit={handleSubmit}>
+              <div className="url-row">
+                <label className="sr-only" htmlFor="originalUrl">Destination URL</label>
+                <input
+                  id="originalUrl"
+                  type="text"
+                  className="input-lg"
+                  autoFocus
+                  placeholder="Paste a long URL…"
+                  value={originalUrl}
+                  onChange={(e) => setOriginalUrl(e.target.value)}
+                  required
+                />
+                <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+                  {loading ? 'Shortening…' : 'Shorten'}
+                </button>
+              </div>
+
+              <div className="options-row">
+                <div className="input-group">
+                  <label className="input-label" htmlFor="customCode">Custom Alias</label>
+                  <input
+                    id="customCode"
+                    type="text"
+                    className="input-field"
+                    placeholder="optional — e.g. my-link"
+                    value={customCode}
+                    onChange={(e) => setCustomCode(e.target.value)}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" htmlFor="expiresAt">Expiration</label>
+                  <input
+                    id="expiresAt"
+                    type="datetime-local"
+                    className="input-field"
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    onClick={(e) => {
+                      // Open the native calendar picker on full-field click.
+                      if ('showPicker' in e.currentTarget) {
+                        try { e.currentTarget.showPicker(); } catch { /* Browser blocked it. */ }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </form>
+
+            {createdLink && (
+              <section className="success-banner" aria-live="polite">
+                <div className="success-header">
+                  <div className="success-title">
+                    <IconCheck />
+                    Link created — {timeAgo(createdLink.createdAt) === 'just now' ? 'just now' : 'ready'}
+                  </div>
+                  <button
+                    className="btn btn-icon"
+                    onClick={() => setCreatedLink(null)}
+                    title="Dismiss"
+                    aria-label="Dismiss result"
+                  >
+                    <IconClose />
+                  </button>
+                </div>
+
+                <div className="success-link-box">
+                  <a className="success-link-text" href={createdLink.shortUrl} target="_blank" rel="noreferrer">
+                    {createdLink.shortUrl}
+                  </a>
+                  <button
+                    className="btn btn-icon"
+                    onClick={() => handleCopy(createdLink.shortUrl || '', 'banner')}
+                    title="Copy short link"
+                    aria-label="Copy short link"
+                  >
+                    {copiedId === 'banner' ? <IconCheck /> : <IconCopy />}
+                  </button>
+                  <button
+                    className="btn btn-icon"
+                    onClick={() => openQrModal(createdLink)}
+                    title="View QR code"
+                    aria-label="View QR code"
+                  >
+                    <IconQr />
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <p className="form-hint">Enter to shorten · Press History to open your links panel</p>
           </div>
         </div>
+      </main>
 
-        <div className="system-status">
-          <span
-            className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`}
-          />
-          <span>{backendStatus === 'online' ? 'Backend Connected' : backendStatus === 'checking' ? 'Connecting...' : 'Backend Offline'}</span>
-        </div>
-      </header>
-
-      {/* Shortener Form Card */}
-      <section className="card">
-        <h2 className="form-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Create Short Link
-        </h2>
-
-        {errorMessage && (
-          <div className="alert alert-danger" role="alert">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label className="input-label" htmlFor="originalUrl">
-              Destination URL <span style={{ color: 'var(--danger)' }}>*</span>
-            </label>
+      {/* ============ Sidebar — collapsible links history ============ */}
+      <aside
+        id="history-sidebar"
+        className={`sidebar${historyOpen ? ' open' : ''}`}
+        inert={!historyOpen}
+      >
+        <div className="sidebar-inner">
+          <div className="sidebar-top">
+            <div className="sidebar-title-row">
+              <h2>History</h2>
+              <span className="sidebar-count">{links.length}</span>
+              <button
+                type="button"
+                className="btn btn-icon minimize-btn"
+                onClick={() => setHistoryOpen(false)}
+                title="Minimize history"
+                aria-label="Minimize history"
+              >
+                <IconPanelClose />
+              </button>
+            </div>
             <input
-              id="originalUrl"
-              type="text"
-              className="input-field"
-              placeholder="e.g. https://example.com/very-long-article-url"
-              value={originalUrl}
-              onChange={(e) => setOriginalUrl(e.target.value)}
-              required
+              type="search"
+              className="search-input"
+              placeholder="Filter by code or URL…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          <div className="options-row">
-            <div className="input-group">
-              <label className="input-label" htmlFor="customCode">
-                Custom Alias (Optional)
-              </label>
-              <input
-                id="customCode"
-                type="text"
-                className="input-field"
-                placeholder="e.g. my-cool-link"
-                value={customCode}
-                onChange={(e) => setCustomCode(e.target.value)}
-              />
+          <div className="sidebar-stats">
+            <div className="stat-chip">
+              <span className="stat-chip-label">Clicks</span>
+              <span className="stat-chip-value">{totalClicks}</span>
             </div>
-
-            <div className="input-group">
-              <label className="input-label" htmlFor="expiresAt">
-                Expiration Date (Optional)
-              </label>
-              <input
-                id="expiresAt"
-                type="datetime-local"
-                className="input-field"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-                onClick={(e) => {
-                  // Open the native calendar picker on full-field click.
-                  if ('showPicker' in e.currentTarget) {
-                    try { e.currentTarget.showPicker(); } catch { /* Browser blocked it — user can use the native icon. */ }
-                  }
-                }}
-              />
+            <div className="stat-chip">
+              <span className="stat-chip-label">Links</span>
+              <span className="stat-chip-value">{links.length}</span>
+            </div>
+            <div className="stat-chip">
+              <span className="stat-chip-label">Active</span>
+              <span className="stat-chip-value accent-success">{activeCount}</span>
+            </div>
+            <div className="stat-chip">
+              <span className="stat-chip-label">Expired</span>
+              <span className="stat-chip-value accent-warning">{expiredCount}</span>
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Generating Short Link...' : 'Shorten URL'}
-          </button>
-        </form>
-      </section>
+          <div className="history-list">
+            {filteredLinks.length === 0 ? (
+              <div className="empty-state">
+                <p>
+                  {searchQuery
+                    ? 'No links match your filter.'
+                    : 'No links yet. Create your first one from the shortener.'}
+                </p>
+              </div>
+            ) : (
+              filteredLinks.map((link) => {
+                const shortUrl = link.shortUrl || `${API_BASE}/${link.shortCode}`;
+                const isExp = link.isExpired;
 
-      {/* Success Notification Banner */}
-      {createdLink && (
-        <section className="success-banner">
-          <div className="success-header">
-            <div className="success-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              URL Shortened Successfully!
-            </div>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => setCreatedLink(null)}
-              style={{ padding: '4px 8px' }}
-              title="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="success-link-box">
-            <span className="success-link-text">{createdLink.shortUrl}</span>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => handleCopy(createdLink.shortUrl || '', 'banner')}
-            >
-              {copiedId === 'banner' ? '✓ Copied!' : 'Copy Link'}
-            </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => openQrModal(createdLink)}
-              title="Generate and view QR Code"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-              </svg>
-              QR Code
-            </button>
-            <a
-              href={createdLink.shortUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm"
-            >
-              Visit ↗
-            </a>
-          </div>
-        </section>
-      )}
-
-      {/* Analytics Summary */}
-      <section className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-label">Total Links</span>
-          <span className="stat-value">{links.length}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Total Clicks</span>
-          <span className="stat-value">{totalClicks}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Active Links</span>
-          <span className="stat-value" style={{ color: 'var(--success)' }}>{activeCount}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Expired Links</span>
-          <span className="stat-value" style={{ color: 'var(--warning)' }}>{expiredCount}</span>
-        </div>
-      </section>
-
-      {/* Dashboard Table */}
-      <section className="dashboard-section">
-        <div className="dashboard-header">
-          <h2 className="dashboard-title">Links Dashboard</h2>
-          <input
-            type="search"
-            className="search-input"
-            placeholder="Search links..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="table-wrapper">
-          <table className="links-table">
-            <thead>
-              <tr>
-                <th>Short Link</th>
-                <th>Original URL</th>
-                <th>Clicks</th>
-                <th>Status</th>
-                <th>Expires</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLinks.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="empty-state">
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                      </svg>
-                      <p>{searchQuery ? 'No links match your search query.' : 'No shortened links yet. Create your first link above!'}</p>
+                return (
+                  <article key={link._id} className={`history-item${isExp ? ' expired' : ''}`}>
+                    <div className="history-row">
+                      <a className="history-code" href={shortUrl} target="_blank" rel="noreferrer">
+                        /{link.shortCode}
+                      </a>
+                      <span
+                        className={`status-dot ${isExp ? 'expired' : 'active'} history-status`}
+                        title={isExp ? 'Expired' : 'Active'}
+                      />
+                      <div className="history-actions">
+                        <button
+                          className="btn btn-icon"
+                          onClick={() => handleCopy(shortUrl, link._id)}
+                          title="Copy short link"
+                          aria-label="Copy short link"
+                        >
+                          {copiedId === link._id ? <IconCheck /> : <IconCopy />}
+                        </button>
+                        <button
+                          className="btn btn-icon"
+                          onClick={() => openQrModal(link)}
+                          title="View QR code"
+                          aria-label="View QR code"
+                        >
+                          <IconQr />
+                        </button>
+                        <button
+                          className="btn btn-icon btn-icon-danger"
+                          onClick={() => handleDelete(link._id)}
+                          title="Delete link"
+                          aria-label="Delete link"
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredLinks.map((link) => {
-                  const shortUrl = link.shortUrl || `${API_BASE}/${link.shortCode}`;
-                  const isExp = link.isExpired;
 
-                  return (
-                    <tr key={link._id} style={{ opacity: isExp ? 0.6 : 1 }}>
-                      <td>
-                        <div className="link-short-cell">
-                          <a href={shortUrl} target="_blank" rel="noreferrer">
-                            /{link.shortCode}
-                          </a>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="link-original-cell" title={link.originalUrl}>
-                          {link.originalUrl}
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge badge-clicks">
-                          {link.clicks || 0} clicks
-                        </span>
-                      </td>
-                      <td>
-                        {isExp ? (
-                          <span className="badge badge-expired">Expired</span>
-                        ) : (
-                          <span className="badge badge-active">Active</span>
-                        )}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                        {link.expiresAt
-                          ? new Date(link.expiresAt).toLocaleString()
-                          : 'Never'}
-                      </td>
-                      <td>
-                        <div className="actions-cell" style={{ justifyContent: 'flex-end' }}>
-                          <button
-                            className="btn btn-outline btn-sm"
-                            onClick={() => handleCopy(shortUrl, link._id)}
-                            title="Copy short link"
-                          >
-                            {copiedId === link._id ? '✓ Copied' : 'Copy'}
-                          </button>
-                          <button
-                            className="btn btn-outline btn-sm"
-                            onClick={() => openQrModal(link)}
-                            title="Generate QR code for this shortened link"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="3" y="3" width="7" height="7" />
-                              <rect x="14" y="3" width="7" height="7" />
-                              <rect x="14" y="14" width="7" height="7" />
-                              <rect x="3" y="14" width="7" height="7" />
-                            </svg>
-                            QR
-                          </button>
-                          <button
-                            className="btn btn-danger-ghost btn-sm"
-                            onClick={() => handleDelete(link._id)}
-                            title="Delete link"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                    <div className="history-url" title={link.originalUrl}>
+                      {link.originalUrl}
+                    </div>
+
+                    <div className="history-meta">
+                      <span>{link.clicks || 0} clicks</span>
+                      <span>{link.expiresAt ? `exp ${new Date(link.expiresAt).toLocaleDateString()}` : 'no expiry'}</span>
+                      <span>{timeAgo(link.createdAt)}</span>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
         </div>
-      </section>
+      </aside>
 
-      {/* QR Code Modal Dialog */}
+      {/* ============ QR Code Modal ============ */}
       {qrModalLink && (
         <div
           className="modal-backdrop"
@@ -561,35 +620,30 @@ export default function App() {
           >
             <div className="modal-header">
               <div className="modal-title-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                </svg>
+                <IconQr />
                 <h3 id="qr-modal-title">QR Code</h3>
-                <span className="badge badge-clicks">/{qrModalLink.shortCode}</span>
+                <span className="badge badge-code">/{qrModalLink.shortCode}</span>
               </div>
               <button
-                className="btn btn-outline btn-sm"
-                style={{ padding: '4px 8px' }}
+                className="btn btn-icon"
                 onClick={closeQrModal}
                 title="Close dialog"
+                aria-label="Close dialog"
               >
-                ✕
+                <IconClose />
               </button>
             </div>
 
             <div className="modal-body">
               <div className="qr-code-wrapper">
                 {qrGenerating ? (
-                  <div className="qr-loading">Generating QR Code...</div>
+                  <div className="qr-loading">Generating QR Code…</div>
                 ) : qrDataUrl ? (
                   <img
                     src={qrDataUrl}
                     alt={`QR Code mapping to ${qrModalLink.shortUrl || qrModalLink.shortCode}`}
-                    width={220}
-                    height={220}
+                    width={200}
+                    height={200}
                     className="qr-image"
                   />
                 ) : (
@@ -603,7 +657,7 @@ export default function App() {
                     {qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`}
                   </span>
                   <button
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-icon"
                     onClick={() =>
                       handleCopy(
                         qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`,
@@ -611,12 +665,13 @@ export default function App() {
                       )
                     }
                     title="Copy short link"
+                    aria-label="Copy short link"
                   >
-                    {copiedId === 'modal' ? '✓ Copied' : 'Copy'}
+                    {copiedId === 'modal' ? <IconCheck /> : <IconCopy />}
                   </button>
                 </div>
                 <p className="qr-explanation">
-                  This QR code encodes the shortened link. Scanning it records analytics clicks and directs visitors to:
+                  Scanning records analytics clicks and directs visitors to:
                 </p>
                 <p className="qr-destination" title={qrModalLink.originalUrl}>
                   {qrModalLink.originalUrl}
@@ -630,11 +685,7 @@ export default function App() {
                 onClick={handleDownloadPng}
                 title="Download PNG image"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
+                <IconDownload />
                 PNG
               </button>
               <button
@@ -642,11 +693,7 @@ export default function App() {
                 onClick={handleDownloadSvg}
                 title="Download SVG vector"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
+                <IconDownload />
                 SVG
               </button>
               <a

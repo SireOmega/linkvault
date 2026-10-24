@@ -1,27 +1,28 @@
 /*
- * ElectroVoid Theme — "Link Vault" URL Shortener
+ * ElectroVoid Theme — "Link Vault" URL Shortener (Console Layout)
  *
  * Palette mapped from the ElectroVoid design system (design-system.md).
  * Every custom property below corresponds to a canonical ElectroVoid token;
  * see the inline comments for which token and why.
  *
- * Hardcoded hex values throughout the rest of this file and in App.jsx
- * inline styles also use canonical ElectroVoid palette values exclusively.
+ * Layout: a no-scroll, utilitarian two-pane console.
+ *   - Main pane: centered shortener form. Fits the viewport; never scrolls
+ *     (a defensive overflow:auto exists on `.shortener-pane` for short windows).
+ *   - Sidebar: links history. It owns ALL vertical scrolling via its internal
+ *     `.history-list`; the page itself never scrolls on desktop.
  *
- * Off-palette shades used:
- *   - rgba(136,0,255,0.15) — translucent accent background for focus rings
- *     and accent-tinted badges. Derived from `electric` (#8800ff) at 15%
- *     opacity; no opaque equivalent exists in the palette.
- *   - rgba(0,255,136,0.12) — translucent success background for alerts/badges.
- *     Derived from `green` (#00ff88) at 12% opacity.
- *   - rgba(255,170,0,0.12) — translucent warning background. Derived from
- *     `amber` (#ffaa00) at 12% opacity.
- *   - rgba(255,59,92,0.12) — translucent danger background. Derived from
- *     `red` (#ff3b5c) at 12% opacity.
- *   These translucent shades are standard practice in existing ElectroVoid
- *   ports (VS Code uses similar alpha-blended accent overlays). They are
- *   documented here rather than nominated for promotion, since they are
- *   contextual alpha variants, not new opaque tokens.
+ * Hardcoded hex values in component rules use canonical ElectroVoid palette
+ * values exclusively. Off-palette alpha variants used (documented per the
+ * design-system "off-palette shades" rule; all are contextual overlays of
+ * canonical tokens, not new opaque tokens):
+ *   - rgba(136,0,255,0.15) — electric focus ring.
+ *   - rgba(0,255,136,0.12 / 0.35) — success badge bg / banner border.
+ *   - rgba(255,170,0,0.12) — warning badge bg.
+ *   - rgba(255,59,92,0.12 / 0.35 / 0.08) — danger badge bg / banner border / icon hover.
+ *   - rgba(68,68,68,0.4 / 0.35) — softened `border` for pane separators and
+ *     de-emphasized row hairlines (full #444444 is reserved for controls).
+ * Gradient `linear-gradient(135deg, #8800ff, #bb00ff)` — brand mark and
+ * primary CTA only, per established ElectroVoid port precedent.
  */
 
 *, *::before, *::after {
@@ -33,45 +34,43 @@
 :root {
   /* void — primary background. Pure black, never a dark gray. */
   --bg-primary: #000000;
-  /* Tell the browser to render built-in controls (date/time calendars,
-     select dropdowns, scrollbars) with the dark UI. */
-  color-scheme: dark;
-  /* surface — first elevation: panels, cards, status bars. */
+  /* surface — first elevation: sidebar, panels, inputs. */
   --bg-secondary: #101010;
-  /* surface-alt — second elevation: popups, widgets, hover menus. */
+  /* surface-alt — second elevation: cards, chips, modal. */
   --bg-card: #141414;
   /* surface — input fields sit at panel elevation. */
   --bg-input: #101010;
-  /* border — static neutral chrome, dividers, inactive borders. */
+  /* surface-hover — row/button hover. */
+  --bg-hover: #1a1a1a;
+  /* border — static neutral chrome on interactive controls. */
   --border-color: #444444;
-  /* border — border on hover stays neutral chrome (not accent). The accent
-     rule reserves electric/electric-bright for focused/active state only. */
-  --border-hover: #444444;
+  /* border-variant — subtler secondary chrome (modal dividers). */
+  --border-variant: #333333;
   /* text — primary foreground. */
   --text-main: #ffffff;
-  /* text-subtle — secondary foreground for labels and less prominent copy. */
+  /* text-subtle — secondary foreground for labels and meta copy. */
   --text-muted: #9e9e9e;
-  /* text-muted — de-emphasized text, placeholders. */
+  /* text-muted — de-emphasized text, meta values. */
   --text-dim: #888888;
-  /* electric — base accent, reserved for active/focused/in-progress state. */
+  /* electric — base accent, reserved for active/focused/primary CTA. */
   --accent: #8800ff;
-  /* electric-bright — hover/pressed/active variant of the accent. */
+  /* electric-bright — hover/pressed variant of the accent. */
   --accent-hover: #bb00ff;
-  /* Translucent electric for focus rings and subtle accent backgrounds. */
+  /* electric-deep — committed selection background (::selection). */
+  --selection-bg: #3b0066;
+  /* Translucent electric for focus rings. */
   --accent-light: rgba(136, 0, 255, 0.15);
   /* green — success/added/created semantic role. */
   --success: #00ff88;
-  /* Translucent green for success alert/badge backgrounds. */
   --success-bg: rgba(0, 255, 136, 0.12);
   /* amber — warning/modified/caution semantic role. */
   --warning: #ffaa00;
-  /* Translucent amber for warning alert/badge backgrounds. */
   --warning-bg: rgba(255, 170, 0, 0.12);
   /* red — error/deleted/failure semantic role. */
   --danger: #ff3b5c;
-  /* Translucent red for danger alert/badge backgrounds. */
   --danger-bg: rgba(255, 59, 92, 0.12);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  /* cyan — info semantic role (links/URLs in informational contexts). */
+  --info: #00e5ff;
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
   --radius: 10px;
@@ -85,40 +84,64 @@
   background-color: var(--bg-primary);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Tell the browser to render built-in controls (date/time calendars,
+     select dropdowns, scrollbars) with the dark UI. */
+  color-scheme: dark;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
+/* Selection uses electric-deep — the "committed" ElectroVoid tone. */
+::selection {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   App shell — fixed two-pane grid. The PAGE never scrolls on desktop.
+   ========================================================================== */
+
+html, body {
+  height: 100%;
 }
 
 body {
-  min-height: 100vh;
+  /* Console behavior: all scrolling is pane-internal. */
+  overflow: hidden;
   background-color: var(--bg-primary);
   color: var(--text-main);
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
+}
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+.main-pane {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-primary);
 }
 
-/* Container */
-.container {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 32px 20px;
-  width: 100%;
-}
+/* ==========================================================================
+   Main pane — header
+   ========================================================================== */
 
-/* Header */
-.app-header {
+.main-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+  padding: 14px 28px;
+  /* Softened `border` rgba variant — pane separator, not a control. */
+  border-bottom: 1px solid rgba(68, 68, 68, 0.4);
+  flex-shrink: 0;
 }
 
 .brand {
@@ -127,32 +150,29 @@ body {
   gap: 12px;
 }
 
+/* Brand mark: electric → electric-bright gradient, per port precedent. */
 .brand-icon {
-  width: 40px;
-  height: 40px;
-  /* electric → electric-bright gradient. The brand icon is always visible,
-     but this is a decorative brand mark, not structural chrome — gradient
-     accents on logo marks are acceptable per existing port precedent. */
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(135deg, #8800ff, #bb00ff);
-  border-radius: 10px;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
   box-shadow: 0 4px 12px rgba(136, 0, 255, 0.35);
+  flex-shrink: 0;
 }
 
 .brand-text h1 {
   font-family: var(--font-heading);
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.5px;
-  /* text — primary foreground. */
-  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
 .brand-text p {
-  font-size: 13px;
+  font-size: 11.5px;
   color: var(--text-muted);
 }
 
@@ -160,489 +180,625 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  padding: 6px 12px;
-  background: var(--bg-secondary);
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
+/* Status dot. Static chrome; green/red are the fixed semantic hues. */
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
 }
 
-.status-dot.online {
-  /* green — success/online semantic role. */
-  background-color: var(--success);
+.status-dot.online,
+.status-dot.active {
+  background: var(--success);
   box-shadow: 0 0 8px var(--success);
 }
 
 .status-dot.offline {
-  /* red — error/offline semantic role. */
-  background-color: var(--danger);
+  background: var(--danger);
   box-shadow: 0 0 8px var(--danger);
 }
 
-/* Card */
-.card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  margin-bottom: 28px;
+/* History rows use a quiet dot (no glow) — glow is reserved for the live
+   backend connection indicator. */
+.history-status {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+  margin-left: auto;
 }
 
-/* Shortener Form */
-.form-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
+.status-dot.expired {
+  background: var(--warning);
+}
+
+.header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
+}
+
+/* Sidebar toggle in the main header. */
+.history-toggle {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.history-toggle[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.history-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-variant);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* ==========================================================================
+   Main pane — shortener (centered, utilitarian)
+   ========================================================================== */
+
+.shortener-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  min-height: 0;
+  /* Defensive only: on unusually short viewports the block scrolls inside
+     this pane instead of the page. */
+  overflow-y: auto;
+}
+
+.shortener-block {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.shortener-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.url-row {
+  display: flex;
+  gap: 10px;
+}
+
+/* The primary destination input — the one big control on the page. */
+.input-lg {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 18px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-lg::placeholder {
+  color: var(--text-dim);
+}
+
+.input-lg:focus {
+  outline: none;
+  /* electric is spent on focus — reserve intact. */
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.options-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .input-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 16px;
 }
 
 .input-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
 .input-field {
-  width: 100%;
-  padding: 12px 16px;
-  background-color: var(--bg-input);
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+  background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  color: var(--text-main);
-  font-size: 15px;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.input-field:focus {
-  /* electric — accent rule: input focus is "live right now" state. */
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-light);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .input-field::placeholder {
   color: var(--text-dim);
+  font-family: var(--font-body);
 }
 
-/* Native datetime-local calendar picker — keep the browser's built-in
-   picker but theme its chrome to match ElectroVoid. */
-.input-field[type='datetime-local'] {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color-scheme: dark; /* dark native calendar popups + visible picker icon */
+.input-field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
-.input-field[type='datetime-local']::-webkit-calendar-picker-indicator {
-  /* The icon is a built-in SVG image, so tone it down with opacity and
-     boost it on hover instead of trying to re-fill it. */
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.2s;
+.form-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
-.input-field[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-  filter: drop-shadow(0 0 4px var(--accent));
-}
+/* ==========================================================================
+   Result banner (created link)
+   ========================================================================== */
 
-.options-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-@media (max-width: 640px) {
-  .options-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 20px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  /* electric → electric-bright gradient. Primary CTA button is an
-     intentional interactive element (user is about to act), so accent is
-     appropriate here per the accent rule. */
-  background: linear-gradient(135deg, #8800ff, #bb00ff);
-  color: white;
-  box-shadow: 0 4px 12px rgba(136, 0, 255, 0.3);
-}
-
-.btn-primary:hover:not(:disabled) {
-  /* electric-bright → deeper electric on hover/pressed. */
-  background: linear-gradient(135deg, #bb00ff, #8800ff);
-  transform: translateY(-1px);
-}
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 13px;
-  border-radius: var(--radius-sm);
-}
-
-.btn-outline {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-}
-
-.btn-outline:hover:not(:disabled) {
-  /* surface-hover — subtle hover state, not accent. */
-  background: #1a1a1a;
-  border-color: var(--border-hover);
-}
-
-.btn-danger-ghost {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid transparent;
-}
-
-.btn-danger-ghost:hover:not(:disabled) {
-  background: var(--danger-bg);
-  border-color: var(--danger);
-}
-
-/* Alert Messages */
-.alert {
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 16px;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.alert-danger {
-  background: var(--danger-bg);
-  border: 1px solid var(--danger);
-  /* ANSI bright red — readable danger text on translucent danger bg. */
-  color: #ff6b82;
-}
-
-.alert-success {
-  background: var(--success-bg);
-  border: 1px solid var(--success);
-  /* ANSI bright green — readable success text on translucent success bg. */
-  color: #5cffb0;
-}
-
-/* Success Card */
 .success-banner {
-  /* Translucent electric gradient background — this banner appears only on
-     a successful action (just created a link), so accent is appropriate:
-     the user's attention is on this result right now. */
-  background: linear-gradient(135deg, rgba(136, 0, 255, 0.1), rgba(187, 0, 255, 0.1));
-  border: 1px solid var(--accent);
+  background: var(--success-bg);
+  border: 1px solid rgba(0, 255, 136, 0.35);
   border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 28px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .success-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
 }
 
 .success-title {
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
 }
 
 .success-link-box {
   display: flex;
   align-items: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  gap: 6px;
+  background: var(--bg-card);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  gap: 10px;
+  padding: 6px 8px;
 }
 
 .success-link-text {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 15px;
-  /* cyan — links and URLs use the info/hint semantic role. */
-  color: #00e5ff;
-  word-break: break-all;
-}
-
-/* Stats Row */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
-@media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.stat-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-label {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--info);
+  text-decoration: none;
 }
 
-.stat-value {
-  font-family: var(--font-heading);
-  font-size: 26px;
-  font-weight: 700;
-  /* text — primary foreground. */
+.success-link-text:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  height: 40px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-light);
+  border-color: var(--border-color);
+}
+
+/* Primary CTA: electric → electric-bright gradient (accent rule: the submit
+   action is the live interactive element). */
+.btn-primary {
+  background: linear-gradient(135deg, #8800ff, #bb00ff);
   color: #ffffff;
 }
 
-/* Dashboard Controls */
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  gap: 16px;
-  flex-wrap: wrap;
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(136, 0, 255, 0.4);
 }
 
-.dashboard-title {
-  font-family: var(--font-heading);
-  font-size: 20px;
-  font-weight: 700;
+.btn-outline {
+  border-color: var(--border-color);
 }
 
-.search-input {
-  max-width: 280px;
-  padding: 8px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+/* Hover keeps neutral chrome — static chrome, never accent. */
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.btn-lg {
+  height: 52px;
+  padding: 0 26px;
+  font-size: 15px;
+}
+
+/* Square icon button — 30px, for history rows and banners. */
+.btn-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: var(--radius-sm);
-  color: var(--text-main);
-  font-size: 14px;
-}
-
-/* Table */
-.table-wrapper {
-  overflow-x: auto;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  background: var(--bg-secondary);
-}
-
-.links-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-  font-size: 14px;
-}
-
-.links-table th {
-  /* surface — table header sits at the surface elevation. */
-  background: rgba(16, 16, 16, 0.8);
-  padding: 12px 16px;
-  font-weight: 600;
+  border-color: var(--border-color);
   color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
 }
 
-.links-table td {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
-  vertical-align: middle;
+.btn-icon:hover:not(:disabled) {
+  color: var(--text-main);
+  background: var(--bg-hover);
 }
 
-.links-table tr:last-child td {
-  border-bottom: none;
+.btn-icon.copied {
+  color: var(--success);
+  border-color: rgba(0, 255, 136, 0.35);
 }
 
-.links-table tr:hover td {
-  /* surface-hover — subtle row hover, not accent. */
-  background-color: rgba(26, 26, 26, 0.5);
+.btn-icon-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: rgba(255, 59, 92, 0.45);
+  background: rgba(255, 59, 92, 0.08);
 }
 
-.link-short-cell {
+/* ==========================================================================
+   Alerts
+   ========================================================================== */
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+
+.alert-danger {
+  background: var(--danger-bg);
+  border: 1px solid rgba(255, 59, 92, 0.35);
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   Sidebar — links history
+   ========================================================================== */
+
+/* Sidebar — collapsed by default; opens from the header's History button
+   and closes via its own minimize button. Width animates smoothly; the
+   fixed-width .sidebar-inner keeps content from reflowing mid-transition. */
+.sidebar {
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border-left: 1px solid rgba(68, 68, 68, 0.4);
+  border-left-color: transparent;
+  transition: width 0.22s ease, border-left-color 0.22s ease;
+}
+
+.sidebar.open {
+  width: 400px;
+  border-left-color: rgba(68, 68, 68, 0.4);
+}
+
+/* Fixed-width content wrapper: no text reflow while the pane slides. */
+.sidebar-inner {
+  width: 400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border-variant);
+}
+
+.sidebar-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.link-short-cell a {
-  /* cyan — URLs/links use the info semantic role. */
-  color: #00e5ff;
-  font-weight: 500;
-  text-decoration: none;
-  font-family: var(--font-mono);
+.sidebar-title-row h2 {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
-.link-short-cell a:hover {
+.sidebar-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-variant);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-input::placeholder {
+  color: var(--text-dim);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+/* Compact stat strip — four equal chips. */
+.sidebar-stats {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-variant);
+}
+
+.stat-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-variant);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stat-chip-label {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.stat-chip-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.stat-chip-value.accent-success { color: var(--success); }
+.stat-chip-value.accent-warning { color: var(--warning); }
+
+/* The ONLY scrolling surface in the app. */
+.history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-variant) transparent;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: var(--border-variant);
+  border-radius: 4px;
+}
+
+/* History item — a quiet, clickable record. */
+.history-item {
+  padding: 10px 10px 9px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.history-item + .history-item {
+  border-top: 1px solid rgba(68, 68, 68, 0.35);
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-item.expired .history-code {
+  color: var(--text-muted);
+}
+
+.history-item.expired .history-url {
+  opacity: 0.6;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-code {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-code:hover {
+  color: var(--accent-hover);
   text-decoration: underline;
 }
 
-.link-original-cell {
-  max-width: 260px;
+.history-code:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-light);
+  border-radius: 3px;
+}
+
+.history-url {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted);
 }
 
-/* Badges */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.badge-active {
-  background: var(--success-bg);
-  /* green — active/success semantic role. */
-  color: #00ff88;
-}
-
-.badge-expired {
-  background: var(--warning-bg);
-  /* amber — warning/expired semantic role. */
-  color: #ffaa00;
-}
-
-.badge-clicks {
-  background: var(--accent-light);
-  /* electric-bright — accent-tinted information badge. This badge indicates
-     click count, which is data the user is currently viewing/acting on. */
-  color: #bb00ff;
-}
-
-.actions-cell {
+.history-meta {
   display: flex;
-  align-items: center;
+  gap: 12px;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Row actions fade in with focus/hover — utilitarian, low noise. */
+.history-actions {
+  display: flex;
   gap: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
 }
 
-/* Empty State */
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+  opacity: 1;
+}
+
+/* Empty state */
 .empty-state {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   padding: 48px 20px;
-  color: var(--text-muted);
-}
-
-.empty-state p {
-  margin-top: 8px;
-  font-size: 14px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
 }
 
 /* ==========================================================================
-   QR Code Modal Dialog — ElectroVoid Theme
+   QR modal
    ========================================================================== */
 
 .modal-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  z-index: 1000;
-  animation: modalFadeIn 0.15s ease-out;
-}
-
-@keyframes modalFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  padding: 24px;
+  z-index: 50;
 }
 
 .modal-card {
-  /* surface — first elevation */
-  background: var(--bg-secondary);
-  /* border — static neutral chrome */
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  width: 100%;
-  max-width: 440px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: modalScaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: modal-in 0.16s ease;
 }
 
-@keyframes modalScaleUp {
+@keyframes modal-in {
   from {
-    transform: scale(0.96) translateY(8px);
     opacity: 0;
-  }
-  to {
-    transform: scale(1) translateY(0);
-    opacity: 1;
+    transform: translateY(6px) scale(0.98);
   }
 }
 
@@ -650,114 +806,106 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-card);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-variant);
 }
 
 .modal-title-box {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-main);
+  gap: 8px;
+  color: var(--text-muted);
 }
 
 .modal-title-box h3 {
-  font-size: 17px;
+  font-family: var(--font-heading);
+  font-size: 14px;
   font-weight: 600;
-  margin: 0;
+  color: var(--text-main);
 }
 
-.modal-title-box svg {
-  color: var(--accent);
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* Static identifier badge — neutral chrome, mono. */
+.badge-code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-variant);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .modal-body {
-  padding: 24px 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  background: var(--bg-secondary);
+  padding: 16px;
 }
 
-/* Crisp white container for the QR code to ensure 100% camera readability */
+/* QR canvas: white plate with a quiet-zone margin so cameras scan reliably. */
 .qr-code-wrapper {
-  background: #ffffff;
-  padding: 12px;
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  border: 1px solid #ffffff;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .qr-image {
   display: block;
-  width: 220px;
-  height: 220px;
   image-rendering: pixelated;
 }
 
 .qr-loading {
-  width: 220px;
-  height: 220px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #101010;
-  font-size: 14px;
-  font-weight: 500;
+  color: #555555;
+  font-size: 13px;
+  font-family: var(--font-mono);
 }
 
 .qr-info-block {
-  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  text-align: center;
+  gap: 8px;
 }
 
 .qr-link-box {
   display: flex;
   align-items: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-variant);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  gap: 10px;
+  padding: 6px 8px;
 }
 
 .qr-link-text {
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: #00e5ff;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--info);
 }
 
 .qr-explanation {
   font-size: 12px;
   color: var(--text-muted);
-  line-height: 1.4;
-  margin: 0;
 }
 
 .qr-destination {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: var(--bg-card);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed #333333;
-  font-family: var(--font-mono);
 }
 
 .modal-footer {
@@ -765,7 +913,88 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 20px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-card);
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-variant);
+}
+
+/* ==========================================================================
+   Accessibility & responsive
+   ========================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Narrow screens: stack panes and re-enable page scrolling. */
+@media (max-width: 960px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Stacked panes: the collapsible sidebar sits below the main pane.
+     No transition on mobile — instant show/hide avoids mid-animation reflow
+     at full width. Closed = fully removed from layout. */
+  .sidebar,
+  .sidebar.open {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(68, 68, 68, 0.4);
+    transition: none;
+    overflow: visible;
+  }
+
+  .sidebar:not(.open) {
+    display: none;
+  }
+
+  .sidebar-inner {
+    width: 100%;
+  }
+
+  .history-list {
+    overflow: visible;
+    max-height: none;
+  }
+
+  .brand-text p {
+    display: none;
+  }
+
+  .options-row {
+    grid-template-columns: 1fr;
+  }
+
+  .url-row {
+    flex-direction: column;
+  }
+
+  .btn-lg {
+    height: 48px;
+  }
+
+  .sidebar-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

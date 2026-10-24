@@ -14,9 +14,9 @@
 
 ## Overview
 
-**Link Vault** is an end-to-end URL shortening service designed with developer ergonomics, speed, and zero friction in mind. It pairs a robust Express REST API with an embedded MongoDB engine (zero-config local persistence out of the box) and a responsive React single-page dashboard for real-time link creation, tracking, and lifecycle management.
+**Link Vault** is an end-to-end URL shortening service designed with developer ergonomics, speed, and zero friction in mind. It pairs a robust Express REST API with an embedded MongoDB engine (zero-config local persistence out of the box) and a React single-page console for real-time link creation, tracking, and lifecycle management.
 
-The entire interface is built with **ElectroVoid**, my handmade dark-and-purple theme featuring a true `#000000` void black background, radiant `#8800ff` / `#bb00ff` electric purple accents reserved for active focus states, and strict semantic color coding.
+The entire interface is built with **ElectroVoid**, my handmade dark-and-purple theme featuring a true `#000000` void black background, radiant `#8800ff` / `#bb00ff` electric purple accents reserved for active focus states, and strict semantic color coding. The layout is a no-scroll two-pane console: a centered, utilitarian shortener on the left, plus a links history sidebar that toggles open and closed (details in the [No-Scroll Two-Pane Layout](#5-no-scroll-two-pane-layout) section).
 
 ---
 
@@ -25,12 +25,12 @@ The entire interface is built with **ElectroVoid**, my handmade dark-and-purple 
 - **⚡ Fast URL Shortening**: Generates clean, compact 6-character short codes using cryptographic base64url encoding.
 - **🏷️ Custom Vanity Aliases**: Supports user-defined custom shortcodes (e.g. `linkvault.local/portfolio`) with reserved-keyword collision protection.
 - **🛡️ Protocol Normalization & Validation**: Automatically handles and prepends schemes (e.g. `google.com` &rarr; `https://google.com`), rejecting malformed hosts and invalid URIs.
-- **📊 Real-Time Analytics Dashboard**: Live metrics counting total redirects, active links, and expired links with instant search filtering.
+- **📊 Toggleable History Sidebar**: Every short link lives in a dedicated, newest-first history panel that opens via the header's **History** button and closes via its own minimize button — compact stat chips (total clicks, links, active, expired), instant search filtering, and hover-revealed per-row actions (copy, QR, delete).
 - **⏳ Link Expiration Support**: Set optional expiration timestamps. Expired links automatically serve an RFC-compliant HTTP `410 Gone` error page.
 - **📋 One-Click Clipboard & Management**: Copy short links to clipboard with visual confirmation and delete unwanted links on the fly.
 - **📱 Instant QR Code Generation**: Automatically generates high-contrast QR codes mapped directly to shortened URLs (preserving analytics tracking when scanned). Includes PNG and SVG download formats in an interactive modal, plus dedicated REST endpoints (`/api/links/:identifier/qr` and `/:shortCode/qr`).
 - **🗄️ Zero-Config Embedded Database**: Connects to an external MongoDB cluster via `MONGO_URI`, or automatically boots an embedded, persistent instance (`mongodb-memory-server` with WiredTiger) if no URI is provided.
-- **🎨 ElectroVoid UI**: Crafted with my handmade **ElectroVoid** theme — an ultra-clean, high-contrast aesthetic pairing pure `#000000` void black, glowing `#8800ff` / `#bb00ff` electric purple focus accents, sleek elevation surfaces, and live backend connection indicators.
+- **🎨 ElectroVoid UI**: Crafted with my handmade **ElectroVoid** theme — an ultra-clean, high-contrast aesthetic pairing pure `#000000` void black, glowing `#8800ff` / `#bb00ff` electric purple focus accents, sleek elevation surfaces, a no-scroll console layout, and live backend connection indicators.
 
 ---
 
@@ -385,23 +385,60 @@ All frontend UI components strictly implement Shreyas's **ElectroVoid** design s
 
 | Token | Hex / CSS Variable | Usage in Link Vault |
 |---|---|---|
-| `void` | `#000000` / `--bg-primary` | Main application background and modal backdrop base. |
-| `surface` | `#101010` / `--bg-secondary` | Cards, panels, input fields, and modal containers. |
-| `surface-alt` | `#141414` / `--bg-card` | Modal headers, stat card backgrounds, table header rows. |
-| `surface-hover` | `#1a1a1a` | Outline button hovers, row hover states. |
-| `border` | `#444444` / `--border-color` | Static neutral chrome borders, table row dividers. |
-| `electric` | `#8800ff` / `--accent` | Base interactive accent: CTA buttons, input focus rings, active badges. |
-| `electric-bright` | `#bb00ff` / `--accent-hover` | Active/hovered CTA buttons, click metric highlights. |
-| `cyan` | `#00e5ff` | URLs, short links, and informational text. |
-| `green` | `#00ff88` / `--success` | Active status badges, success indicators. |
-| `amber` | `#ffaa00` / `--warning` | Expired status badges, expiration warnings. |
-| `red` | `#ff3b5c` / `--danger` | Error alerts, delete buttons. |
+| `void` | `#000000` / `--bg-primary` | Main pane background and modal backdrop base. |
+| `surface` | `#101010` / `--bg-secondary` | History sidebar, input fields, and embedded modal surfaces. |
+| `surface-alt` | `#141414` / `--bg-card` | Modal container, sidebar stat chips, success-banner link box. |
+| `surface-hover` | `#1a1a1a` | Icon button hovers and history row hover states. |
+| `border` | `#444444` / `--border-color` | Borders on interactive controls (inputs, icon buttons). Pane separators and history row hairlines use a softened `rgba(68,68,68,…)` variant of this token. |
+| `border-variant` | `#333333` | Subtler secondary chrome: modal dividers, sidebar section rules, scrollbar thumb. |
+| `electric` | `#8800ff` / `--accent` | Base interactive accent: primary CTA gradient, input focus rings. |
+| `electric-bright` | `#bb00ff` / `--accent-hover` | Hovered short-code links in history rows; CTA gradient end stop. |
+| `electric-deep` | `#3b0066` / `::selection` | Committed text selection background. |
+| `cyan` | `#00e5ff` / `--info` | Short links and informational text. |
+| `green` | `#00ff88` / `--success` | Active status dots, success banner, active stat chips. |
+| `amber` | `#ffaa00` / `--warning` | Expired status dots and warn-toned stat chips. |
+| `red` | `#ff3b5c` / `--danger` | Error alerts, delete button hover, offline backend dot. |
 
 > **The Accent Rule**: In ElectroVoid, electric purple (`#8800ff` / `#bb00ff`) is strictly reserved for live, focused, or active interactive elements. Static chrome, separators, and neutral borders always use neutral chrome (`#444444` / `#333333`).
 
 ---
 
-### 5. Automated Test Suite & Ephemeral Server Architecture
+### 5. No-Scroll Two-Pane Layout
+
+The frontend renders a fixed, two-pane console. The **page never scrolls** on desktop; vertical motion is delegated to panes explicitly, and the history sidebar is a collapsible panel driven by two buttons — the `History` toggle in the main header (expand), and a panel-close icon in the sidebar's own title row (minimize).
+
+```
+┌──────────────────────────────────────────────┬──────────────────────┐
+│ Main pane (flex column, void #000000)        │ Sidebar (surface     │
+│ ┌──────────────────────────────────────────┐ │ #101010, animates    │
+│ │ Header: brand · status · [🕘 History ⟦3⟧]│ │ 0 ⇄ 400px wide)     │
+│ ├──────────────────────────────────────────┤ │ ┌──────────────────┐ │
+│ │                                          │ │ │ History [3] [⇤]  │ │
+│ │      .shortener-pane (centered)          │ │ │ Filter search    │ │
+│ │   ┌────────────────────────────────┐     │ │ ├──────────────────┤ │
+│ │   │  [ Paste a long URL… ] [ ▸ ]   │     │ │ │ Stat chips ×4    │ │
+│ │   │  Custom Alias   Expiration     │     │ │ ├──────────────────┤ │
+│ │   └────────────────────────────────┘     │ │ │ .history-list    │ │
+│ │   [ created link result banner ]         │ │ │ (overflow-y:     │ │
+│ │   Enter to shorten · …                   │ │ │  auto — the ONLY │ │
+│ │                                          │ │ │  scroll surface) │ │
+│ └──────────────────────────────────────────┘ │ └──────────────────┘ │
+└──────────────────────────────────────────────┴──────────────────────┘
+                                     └──── collapsed state: 0px wide ────┘
+```
+
+- **Shell**: `.app-shell` is `display: flex` at `height: 100dvh` (with a `100vh` fallback), while `body { overflow: hidden }` suppresses page scroll. The flexible main pane absorbs the reclaimed width automatically when the sidebar collapses.
+- **Sidebar collapse**: the sidebar animates `width: 0 ⇄ 400px` (220ms ease) with `overflow: hidden`, and its `border-left` fades via `border-left-color` so no stray line remains when collapsed. A fixed-width `.sidebar-inner` wrapper prevents content reflow mid-slide. The sidebar mounts expanded-or-not from a single `historyOpen` state; when collapsed it carries the `inert` attribute, so hidden rows are neither visible nor keyboard-tabbable, and a collapsed sidebar re-expands only via the header's History button (`aria-expanded`/`aria-controls` reflect the state).
+- **Main pane**: the shortener block (`max-width: 640px`) is centered with flex. `.shortener-pane` carries a defensive `overflow-y: auto` so content degrades gracefully inside the pane on unusually short viewports instead of ever scrolling the page. The created-link result renders as an inline success banner directly beneath the form, so feedback lands in the user's focus point.
+- **History sidebar**: `GET /api/links` already returns `sort({ createdAt: -1 })`, so the feed is newest-first by construction. Each row is a record, not a card: mono `/shortCode` link, active/expired dot, original URL (ellipsized with a `title` tooltip), and a mono meta line (`clicks · expiry · relative age` via a local `timeAgo` helper). Row actions (copy / QR / delete icon buttons) sit at 55% opacity and resolve to full opacity on `hover` or `:focus-within`, keeping rows quiet until needed.
+- **Scroll ownership**: `.history-list` is the single `overflow-y: auto` surface, styled with `scrollbar-width: thin` and a `#333333` (`border-variant`) WebKit thumb for a low-noise utilitarian feel.
+- **Expired rows** dim short-code color and URL opacity, per ElectroVoid's fixed semantic role mapping (amber dot marks expiration).
+- **Responsive degradation**: below `960px`, panes stack vertically and `body` overflow is re-enabled for page scrolling. The sidebar's width transition is disabled there (instant show/hide avoids mid-animation reflow at full width); a closed sidebar is removed from layout entirely via `display: none` and expands to the full pane width when opened. The no-scroll rule and 400px slide are intentionally desktop affordances only.
+- **Accessibility**: the History toggle exposes `aria-expanded` and `aria-controls`; every icon-only button carries an `aria-label` and `title`; inputs pair with visible or `sr-only` labels; focus states use the translucent electric ring (`rgba(136,0,255,0.15)`); all animation respects `prefers-reduced-motion`. The QR modal keeps `role="dialog"`, `aria-modal`, `aria-labelledby`, backdrop-click and Escape-key dismissal, with no focus-trapping library by design (single-modal app).
+
+---
+
+### 6. Automated Test Suite & Ephemeral Server Architecture
 
 The backend test suite in `backend/test/server.test.ts` uses Node.js's native test runner (`node:test`, `node:assert`):
 - **Ephemeral Port Binding (`startServer(0)`)**: Tests start the HTTP server on dynamic port `0`, allowing the operating system to assign an unused ephemeral port. This prevents `EADDRINUSE` conflicts when running tests while a local development server is active.
