@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import axios from 'axios';
+import QRCode from 'qrcode';
 import type { LinkItem, BackendStatus, ShortenPayload } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || 'http://localhost:5000';
@@ -15,6 +16,94 @@ export default function App() {
   const [createdLink, setCreatedLink] = useState<LinkItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [qrModalLink, setQrModalLink] = useState<LinkItem | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [qrGenerating, setQrGenerating] = useState<boolean>(false);
+
+  const openQrModal = (link: LinkItem) => {
+    setQrModalLink(link);
+    if (link.qrCode) {
+      setQrDataUrl(link.qrCode);
+      setQrGenerating(false);
+    } else {
+      setQrDataUrl('');
+      setQrGenerating(true);
+      const shortUrl = link.shortUrl || `${API_BASE}/${link.shortCode}`;
+      QRCode.toDataURL(shortUrl, {
+        width: 320,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+        .then((url) => {
+          setQrDataUrl(url);
+        })
+        .catch((err) => {
+          console.error('Failed to generate QR code data URL:', err);
+        })
+        .finally(() => {
+          setQrGenerating(false);
+        });
+    }
+  };
+
+  const closeQrModal = () => {
+    setQrModalLink(null);
+    setQrDataUrl('');
+    setQrGenerating(false);
+  };
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeQrModal();
+      }
+    };
+    if (qrModalLink) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [qrModalLink]);
+
+  const handleDownloadPng = () => {
+    if (!qrModalLink) return;
+    if (qrDataUrl) {
+      const a = document.createElement('a');
+      a.href = qrDataUrl;
+      a.download = `qr-${qrModalLink.shortCode}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      window.open(`${API_BASE}/api/links/${qrModalLink.shortCode}/qr?download=true`, '_blank');
+    }
+  };
+
+  const handleDownloadSvg = async () => {
+    if (!qrModalLink) return;
+    const shortUrl = qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`;
+    try {
+      const svgString = await QRCode.toString(shortUrl, {
+        type: 'svg',
+        width: 320,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qr-${qrModalLink.shortCode}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(`${API_BASE}/api/links/${qrModalLink.shortCode}/qr?format=svg&download=true`, '_blank');
+    }
+  };
 
   // Fetch all links and health
   const refreshLinks = async (): Promise<void> => {
@@ -290,6 +379,19 @@ export default function App() {
             >
               {copiedId === 'banner' ? '✓ Copied!' : 'Copy Link'}
             </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => openQrModal(createdLink)}
+              title="Generate and view QR Code"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+              QR Code
+            </button>
             <a
               href={createdLink.shortUrl}
               target="_blank"
@@ -407,6 +509,19 @@ export default function App() {
                             {copiedId === link._id ? '✓ Copied' : 'Copy'}
                           </button>
                           <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => openQrModal(link)}
+                            title="Generate QR code for this shortened link"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="3" width="7" height="7" />
+                              <rect x="14" y="3" width="7" height="7" />
+                              <rect x="14" y="14" width="7" height="7" />
+                              <rect x="3" y="14" width="7" height="7" />
+                            </svg>
+                            QR
+                          </button>
+                          <button
                             className="btn btn-danger-ghost btn-sm"
                             onClick={() => handleDelete(link._id)}
                             title="Delete link"
@@ -423,6 +538,123 @@ export default function App() {
           </table>
         </div>
       </section>
+
+      {/* QR Code Modal Dialog */}
+      {qrModalLink && (
+        <div
+          className="modal-backdrop"
+          onClick={closeQrModal}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="qr-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                <h3 id="qr-modal-title">QR Code</h3>
+                <span className="badge badge-clicks">/{qrModalLink.shortCode}</span>
+              </div>
+              <button
+                className="btn btn-outline btn-sm"
+                style={{ padding: '4px 8px' }}
+                onClick={closeQrModal}
+                title="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="qr-code-wrapper">
+                {qrGenerating ? (
+                  <div className="qr-loading">Generating QR Code...</div>
+                ) : qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt={`QR Code mapping to ${qrModalLink.shortUrl || qrModalLink.shortCode}`}
+                    width={220}
+                    height={220}
+                    className="qr-image"
+                  />
+                ) : (
+                  <div className="qr-loading">Failed to load QR code</div>
+                )}
+              </div>
+
+              <div className="qr-info-block">
+                <div className="qr-link-box">
+                  <span className="qr-link-text">
+                    {qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`}
+                  </span>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() =>
+                      handleCopy(
+                        qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`,
+                        'modal'
+                      )
+                    }
+                    title="Copy short link"
+                  >
+                    {copiedId === 'modal' ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="qr-explanation">
+                  This QR code encodes the shortened link. Scanning it records analytics clicks and directs visitors to:
+                </p>
+                <p className="qr-destination" title={qrModalLink.originalUrl}>
+                  {qrModalLink.originalUrl}
+                </p>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={handleDownloadPng}
+                title="Download PNG image"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                PNG
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={handleDownloadSvg}
+                title="Download SVG vector"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                SVG
+              </button>
+              <a
+                href={qrModalLink.shortUrl || `${API_BASE}/${qrModalLink.shortCode}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary btn-sm"
+              >
+                Visit Link ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

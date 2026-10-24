@@ -7,6 +7,7 @@ import cors from 'cors';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
+import QRCode from 'qrcode';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { Server } from 'http';
 
@@ -26,6 +27,8 @@ export interface FormattedUrl {
   originalUrl: string;
   shortCode: string;
   shortUrl: string;
+  qrUrl: string;
+  qrCode?: string;
   clicks: number;
   expiresAt: Date | null;
   isExpired: boolean;
@@ -145,17 +148,20 @@ export const RESERVED_CODES = new Set<string>([
   'shorten',
   'static',
   'assets',
+  'qr',
 ]);
 
 // Helper: Format URL document for API response
 export function formatUrl(doc: IUrlDocument, req: Request): FormattedUrl {
   const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
   const isExpired = Boolean(doc.expiresAt && new Date() > new Date(doc.expiresAt));
+  const shortUrl = `${baseUrl}/${doc.shortCode}`;
   return {
     _id: doc._id,
     originalUrl: doc.originalUrl,
     shortCode: doc.shortCode,
-    shortUrl: `${baseUrl}/${doc.shortCode}`,
+    shortUrl,
+    qrUrl: `${baseUrl}/api/links/${doc.shortCode}/qr`,
     clicks: doc.clicks,
     expiresAt: doc.expiresAt,
     isExpired,
@@ -237,7 +243,14 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
       expiresAt: parsedExpiresAt,
     });
 
-    return res.status(201).json(formatUrl(newUrl, req));
+    const formatted = formatUrl(newUrl, req);
+    const qrCode = await QRCode.toDataURL(formatted.shortUrl, {
+      width: 300,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+
+    return res.status(201).json({ ...formatted, qrCode });
   } catch (err) {
     console.error('Error creating short URL:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
@@ -283,12 +296,123 @@ app.delete('/api/links/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Helper: Handle QR code generation for a given short code or MongoDB ID
+export async function handleQrCodeRequest(
+  req: Request,
+  res: Response,
+  identifier: string | undefined
+): Promise<void | Response> {
+  try {
+    if (!identifier) {
+      return res.status(400).json({ error: 'Identifier parameter is required' });
+    }
+
+    let urlDoc: IUrlDocument | null = null;
+    if (Types.ObjectId.isValid(identifier)) {
+      urlDoc = await Url.findById(identifier);
+    }
+    if (!urlDoc) {
+      urlDoc = await Url.findOne({ shortCode: identifier });
+    }
+
+    if (!urlDoc) {
+      if (req.headers.accept?.includes('application/json')) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>404 - Link Not Found</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 80px 20px; background: #000000; color: #ffffff; }
+            .card { max-width: 500px; margin: 0 auto; background: #101010; padding: 40px; border-radius: 10px; border: 1px solid #444444; }
+            h1 { color: #ff3b5c; margin-bottom: 12px; font-size: 28px; }
+            p { color: #9e9e9e; font-size: 16px; line-height: 1.5; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>404 - Link Not Found</h1>
+            <p>Could not generate QR code. The shortened link was not found or may have been deleted.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const shortUrl = `${baseUrl}/${urlDoc.shortCode}`;
+
+    const rawFormat = typeof req.query.format === 'string' ? req.query.format.toLowerCase() : '';
+    const isDownload = req.query.download === 'true' || req.query.download === '1';
+    const widthParam = typeof req.query.width === 'string' ? parseInt(req.query.width, 10) : 300;
+    const width = !isNaN(widthParam) ? Math.min(Math.max(widthParam, 64), 2048) : 300;
+    const marginParam = typeof req.query.margin === 'string' ? parseInt(req.query.margin, 10) : 2;
+    const margin = !isNaN(marginParam) ? Math.min(Math.max(marginParam, 0), 10) : 2;
+
+    const qrOptions = {
+      width,
+      margin,
+      color: {
+        dark: '#000000',
+        light: '#ffffff',
+      },
+    };
+
+    if (rawFormat === 'svg') {
+      const svg = await QRCode.toString(shortUrl, { ...qrOptions, type: 'svg' });
+      res.setHeader('Content-Type', 'image/svg+xml');
+      if (isDownload) {
+        res.setHeader('Content-Disposition', `attachment; filename="qr-${urlDoc.shortCode}.svg"`);
+      }
+      return res.send(svg);
+    }
+
+    if (rawFormat === 'json' || (!rawFormat && req.headers.accept?.includes('application/json'))) {
+      const dataUrl = await QRCode.toDataURL(shortUrl, qrOptions);
+      return res.json({
+        shortCode: urlDoc.shortCode,
+        shortUrl,
+        qrCode: dataUrl,
+      });
+    }
+
+    // Default to PNG buffer
+    const pngBuffer = await QRCode.toBuffer(shortUrl, { ...qrOptions, type: 'png' });
+    res.setHeader('Content-Type', 'image/png');
+    if (isDownload) {
+      res.setHeader('Content-Disposition', `attachment; filename="qr-${urlDoc.shortCode}.png"`);
+    }
+    return res.send(pngBuffer);
+  } catch (err) {
+    console.error('Error generating QR code:', err);
+    return res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+}
+
+// API Endpoint: Get QR Code for link (supports ID or short code)
+app.get('/api/links/:identifier/qr', async (req: Request, res: Response) => {
+  const rawId = req.params.identifier;
+  const identifier = Array.isArray(rawId) ? rawId[0] : rawId;
+  return handleQrCodeRequest(req, res, identifier);
+});
+
 // Favicon and robots static ignore
 app.get('/favicon.ico', (_req: Request, res: Response) => {
   res.status(204).end();
 });
 app.get('/robots.txt', (_req: Request, res: Response) => {
   res.status(204).end();
+});
+
+// Direct QR Code Endpoint: /:shortCode/qr
+app.get('/:shortCode/qr', async (req: Request, res: Response) => {
+  const rawCode = req.params.shortCode;
+  const shortCode = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+  return handleQrCodeRequest(req, res, shortCode);
 });
 
 // Redirect Endpoint

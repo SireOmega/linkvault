@@ -28,6 +28,7 @@ The entire interface is built with **ElectroVoid**, my handmade dark-and-purple 
 - **📊 Real-Time Analytics Dashboard**: Live metrics counting total redirects, active links, and expired links with instant search filtering.
 - **⏳ Link Expiration Support**: Set optional expiration timestamps. Expired links automatically serve an RFC-compliant HTTP `410 Gone` error page.
 - **📋 One-Click Clipboard & Management**: Copy short links to clipboard with visual confirmation and delete unwanted links on the fly.
+- **📱 Instant QR Code Generation**: Automatically generates high-contrast QR codes mapped directly to shortened URLs (preserving analytics tracking when scanned). Includes PNG and SVG download formats in an interactive modal, plus dedicated REST endpoints (`/api/links/:identifier/qr` and `/:shortCode/qr`).
 - **🗄️ Zero-Config Embedded Database**: Connects to an external MongoDB cluster via `MONGO_URI`, or automatically boots an embedded, persistent instance (`mongodb-memory-server` with WiredTiger) if no URI is provided.
 - **🎨 ElectroVoid UI**: Crafted with my handmade **ElectroVoid** theme — an ultra-clean, high-contrast aesthetic pairing pure `#000000` void black, glowing `#8800ff` / `#bb00ff` electric purple focus accents, sleek elevation surfaces, and live backend connection indicators.
 
@@ -37,8 +38,8 @@ The entire interface is built with **ElectroVoid**, my handmade dark-and-purple 
 
 | Layer | Technologies |
 |---|---|
-| **Backend** | Node.js, Express 5, TypeScript, Mongoose 9, tsx, mongodb-memory-server, dotenv, cors |
-| **Frontend** | React 19, TypeScript, Vite 8, Axios, Oxlint, ElectroVoid Theme (my handmade design system) |
+| **Backend** | Node.js, Express 5, TypeScript, Mongoose 9, tsx, mongodb-memory-server, qrcode, dotenv, cors |
+| **Frontend** | React 19, TypeScript, Vite 8, Axios, qrcode, Oxlint, ElectroVoid Theme (my handmade design system) |
 | **Testing** | Node.js native test runner (`node:test`, `node:assert`), tsx |
 | **Database** | MongoDB (External MongoDB Atlas / Docker URI or embedded local storage in `backend/.mongo-data/`) |
 
@@ -180,6 +181,8 @@ Create a new shortened link.
     "originalUrl": "https://example.com/very-long-path?param=1",
     "shortCode": "my-alias",
     "shortUrl": "http://localhost:5000/my-alias",
+    "qrUrl": "http://localhost:5000/api/links/my-alias/qr",
+    "qrCode": "data:image/png;base64,iVBORw...",
     "clicks": 0,
     "expiresAt": "2026-12-31T23:59:59.000Z",
     "isExpired": false,
@@ -244,7 +247,31 @@ Inspect API availability and MongoDB connection state.
 
 ---
 
-### 5. Redirect Endpoint
+### 5. Generate QR Code
+Generate a high-contrast QR code mapped directly to the shortened URL.
+
+- **URL**: `/api/links/:identifier/qr` or `/:shortCode/qr`
+- **Method**: `GET`
+- **Query Parameters**:
+  - `format`: `png` (default), `svg`, or `json` (returns Data URL)
+  - `download`: `true` or `1` (triggers file download)
+  - `width`: Image width in pixels (64 - 2048, default: 300)
+  - `margin`: Module quiet zone padding (0 - 10, default: 2)
+- **Response**:
+  - `format=png`: Raw image buffer (`Content-Type: image/png`)
+  - `format=svg`: SVG vector markup (`Content-Type: image/svg+xml`)
+  - `format=json`: JSON payload with base64 Data URL:
+    ```json
+    {
+      "shortCode": "my-alias",
+      "shortUrl": "http://localhost:5000/my-alias",
+      "qrCode": "data:image/png;base64,iVBORw..."
+    }
+    ```
+
+---
+
+### 6. Redirect Endpoint
 Redirects visitors to the original destination URL.
 
 - **URL**: `/:shortCode`

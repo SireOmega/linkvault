@@ -64,12 +64,18 @@ test('POST /api/shorten generates short link with prepended https protocol', asy
     originalUrl: string;
     shortCode: string;
     shortUrl: string;
+    qrUrl: string;
+    qrCode: string;
     clicks: number;
   };
   assert.strictEqual(data.originalUrl, 'https://example.com/');
   assert.ok(data.shortCode);
   assert.ok(data.shortUrl);
   assert.strictEqual(data.clicks, 0);
+  assert.ok(data.qrUrl);
+  assert.ok(data.qrCode);
+  assert.match(data.qrCode, /^data:image\/png;base64,/);
+  assert.match(data.qrUrl, new RegExp(`/api/links/${data.shortCode}/qr$`));
 });
 
 test('POST /api/shorten accepts custom code', async () => {
@@ -159,4 +165,64 @@ test('DELETE /api/links/:id removes link', async () => {
 
   const found = await Url.findById(doc._id);
   assert.strictEqual(found, null);
+});
+
+test('GET /api/links/:shortCode/qr returns PNG QR code by default', async () => {
+  const res = await fetch(`${baseUrl}/api/links/my-custom-git/qr`);
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /^image\/png/);
+  const buffer = await res.arrayBuffer();
+  assert.ok(buffer.byteLength > 100);
+});
+
+test('GET /api/links/:shortCode/qr?format=svg returns SVG QR code', async () => {
+  const res = await fetch(`${baseUrl}/api/links/my-custom-git/qr?format=svg`);
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /^image\/svg\+xml/);
+  const svg = await res.text();
+  assert.match(svg, /<svg/);
+  assert.match(svg, /<\/svg>/);
+});
+
+test('GET /api/links/:shortCode/qr?format=json returns QR code data url mapping to shortUrl', async () => {
+  const res = await fetch(`${baseUrl}/api/links/my-custom-git/qr?format=json`);
+  assert.strictEqual(res.status, 200);
+  const data = (await res.json()) as { shortCode: string; shortUrl: string; qrCode: string };
+  assert.strictEqual(data.shortCode, 'my-custom-git');
+  assert.match(data.shortUrl, /\/my-custom-git$/);
+  assert.match(data.qrCode, /^data:image\/png;base64,/);
+});
+
+test('GET /api/links/:shortCode/qr?download=true sets attachment content-disposition', async () => {
+  const res = await fetch(`${baseUrl}/api/links/my-custom-git/qr?download=true`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(
+    res.headers.get('content-disposition'),
+    'attachment; filename="qr-my-custom-git.png"'
+  );
+});
+
+test('GET /:shortCode/qr convenience route returns PNG QR code', async () => {
+  const res = await fetch(`${baseUrl}/my-custom-git/qr`);
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /^image\/png/);
+});
+
+test('GET /api/links/:id/qr finds link by MongoDB ID', async () => {
+  const doc = await Url.findOne({ shortCode: 'my-custom-git' });
+  assert.ok(doc);
+  const res = await fetch(`${baseUrl}/api/links/${doc._id}/qr?format=json`);
+  assert.strictEqual(res.status, 200);
+  const data = (await res.json()) as { shortCode: string; shortUrl: string };
+  assert.strictEqual(data.shortCode, 'my-custom-git');
+  assert.match(data.shortUrl, /\/my-custom-git$/);
+});
+
+test('GET /api/links/nonexistent/qr returns 404', async () => {
+  const res = await fetch(`${baseUrl}/api/links/nonexistent123/qr`, {
+    headers: { Accept: 'application/json' },
+  });
+  assert.strictEqual(res.status, 404);
+  const data = (await res.json()) as { error: string };
+  assert.match(data.error, /not found/i);
 });

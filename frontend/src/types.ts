@@ -3,6 +3,8 @@ export interface LinkItem {
   originalUrl: string;
   shortCode: string;
   shortUrl?: string;
+  qrUrl?: string;
+  qrCode?: string;
   clicks: number;
   expiresAt: string | null;
   isExpired: boolean;
