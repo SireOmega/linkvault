@@ -303,6 +303,114 @@ npm run build
 
 ---
 
+## 🛠️ Development & Engineering Guide
+
+This section explains the internal design decisions, architectural flows, and implementation details for contributors and developers working on Link Vault.
+
+### 1. Dual-Database Strategy & Persistence Lifecycle
+
+Link Vault is engineered to run out of the box with zero external database configuration:
+- **Production / External Cluster**: If `MONGO_URI` is populated in `backend/.env` with a valid MongoDB connection string, Mongoose connects directly to that cluster with a 5000ms server selection timeout.
+- **Embedded Local Persistence**: If `MONGO_URI` is unset or contains a placeholder, the backend automatically initializes an embedded `mongodb-memory-server` configured with the **WiredTiger** storage engine pointing to `backend/.mongo-data/`.
+  - This ensures that shortened links, expiration timestamps, and click counts persist across server restarts during local development.
+  - **Graceful Lock Handling**: If the database directory is locked by another running process (e.g., during rapid restarts), the server catches the lock error and falls back to a fresh in-memory instance, logging an informative notice.
+- **Automated Testing Isolation**: In test runs (`NODE_ENV === 'test'`), database initialization skips the file directory and runs in an isolated ephemeral instance, resetting collections between runs.
+
+---
+
+### 2. URL Shortening & Collision Resolution Pipeline
+
+When a user submits a URL to `POST /api/shorten`:
+
+```
+User Input URL
+      │
+      ▼
+Normalize & Protocol Validation (normalizeUrl)
+      │
+      ├── Invalid / Disallowed Scheme ──► 400 Bad Request
+      ▼
+Check Custom Alias or Auto-generate:
+      │
+      ├─ Custom Alias:
+      │    ├─ Validate pattern (3-30 chars: [a-zA-Z0-9_-])
+      │    ├─ Check RESERVED_CODES collision (api, qr, health, links, etc.)
+      │    └─ Check MongoDB duplicate shortCode ──► 409 Conflict if taken
+      │
+      └─ Auto-Generated Code:
+           ├─ Generate 6-char base64url using crypto.randomBytes(4)
+           ├─ Loop with exponential entropy expansion if collisions occur
+           └─ Filter out reserved keywords
+      │
+      ▼
+Save Document (Url.create)
+      │
+      ▼
+Format API Response + Generate QR Data URL
+```
+
+1. **Protocol Normalization**: Raw URLs missing a scheme (e.g. `github.com/trending`) automatically receive `https://`. Malformed hostnames or URIs lacking a dot are rejected immediately.
+2. **Cryptographic Entropy**: 6-character auto-generated codes provide $64^6 \approx 68.7 \text{ billion}$ unique combinations. If multiple collisions are detected during collision resolution loops, an extra random hex suffix is appended.
+3. **Atomic Analytics Tracking**: In `GET /:shortCode`, redirects atomically call `Url.findByIdAndUpdate(url._id, { $inc: { clicks: 1 } })` before performing the 302 redirect. This eliminates race conditions under high concurrent traffic.
+
+---
+
+### 3. QR Code Generation Architecture
+
+Link Vault provides end-to-end QR code generation with a strict requirement: **all QR codes map directly to the shortened URL, never the destination URL**.
+
+#### Why Map to the Shortened URL?
+By encoding the short URL (`http://localhost:5000/xyz`) rather than the target URL (`https://example.com`):
+1. Any device scanning the QR code triggers the redirect endpoint.
+2. The click count increments in real time on the dashboard.
+3. If the link has expired, the scanner is properly greeted with the RFC-compliant `410 Gone` message.
+
+#### Dual-Layer Generation Flow:
+- **Client-Side Generation (Instant)**:
+  - When opening the QR modal in the React dashboard, `qrcode.toDataURL()` renders the image canvas locally in milliseconds.
+  - SVG vector files can be converted into `image/svg+xml` Blobs directly in the browser for instant vector downloads without server load.
+- **Server-Side REST Endpoints (Universal Access)**:
+  - `GET /api/links/:identifier/qr`: Serves the QR code in multiple formats (`png`, `svg`, `json`) via query parameter `?format=`.
+  - `GET /:shortCode/qr`: Direct shortcut route. Visiting `http://localhost:5000/my-link/qr` in a browser or markdown image tag immediately outputs the QR image buffer.
+  - Supports `?download=true` which attaches `Content-Disposition: attachment; filename="qr-<codebox>.png"`.
+
+#### Scanning Reliability & ElectroVoid Palette
+While Link Vault uses the dark `#000000` void theme throughout the UI, QR codes require high visual luminance contrast for phone camera lenses and barcode decoders. The modal displays the QR code on a dedicated pure white `#ffffff` canvas with a standard quiet-zone margin (2 modules), ensuring 100% scan accuracy on both iOS and Android camera apps.
+
+---
+
+### 4. ElectroVoid Design System in React & CSS
+
+All frontend UI components strictly implement Shreyas's **ElectroVoid** design system tokens:
+
+| Token | Hex / CSS Variable | Usage in Link Vault |
+|---|---|---|
+| `void` | `#000000` / `--bg-primary` | Main application background and modal backdrop base. |
+| `surface` | `#101010` / `--bg-secondary` | Cards, panels, input fields, and modal containers. |
+| `surface-alt` | `#141414` / `--bg-card` | Modal headers, stat card backgrounds, table header rows. |
+| `surface-hover` | `#1a1a1a` | Outline button hovers, row hover states. |
+| `border` | `#444444` / `--border-color` | Static neutral chrome borders, table row dividers. |
+| `electric` | `#8800ff` / `--accent` | Base interactive accent: CTA buttons, input focus rings, active badges. |
+| `electric-bright` | `#bb00ff` / `--accent-hover` | Active/hovered CTA buttons, click metric highlights. |
+| `cyan` | `#00e5ff` | URLs, short links, and informational text. |
+| `green` | `#00ff88` / `--success` | Active status badges, success indicators. |
+| `amber` | `#ffaa00` / `--warning` | Expired status badges, expiration warnings. |
+| `red` | `#ff3b5c` / `--danger` | Error alerts, delete buttons. |
+
+> **The Accent Rule**: In ElectroVoid, electric purple (`#8800ff` / `#bb00ff`) is strictly reserved for live, focused, or active interactive elements. Static chrome, separators, and neutral borders always use neutral chrome (`#444444` / `#333333`).
+
+---
+
+### 5. Automated Test Suite & Ephemeral Server Architecture
+
+The backend test suite in `backend/test/server.test.ts` uses Node.js's native test runner (`node:test`, `node:assert`):
+- **Ephemeral Port Binding (`startServer(0)`)**: Tests start the HTTP server on dynamic port `0`, allowing the operating system to assign an unused ephemeral port. This prevents `EADDRINUSE` conflicts when running tests while a local development server is active.
+- **Isolated In-Memory Database**: Tests run against a fresh in-memory database instance, isolating test data from local development data in `.mongo-data/`.
+- **Fast Execution**: Tests execute using `tsx --test` in under 2 seconds without requiring heavy external test harnesses.
+- **Linting Discipline**: Frontend code is verified with **Oxlint** (`oxlint`), enforcing clean React 19 hook patterns (e.g. avoiding cascading re-renders via `set-state-in-effect`).
+
+---
+
 ## 🔒 Security & Validation Details
 
 - **Input Sanitization**: Protocol enforcement rejects dangerous schemes (`javascript:`, `data:`, `file:`) and ensures valid domain formatting.
