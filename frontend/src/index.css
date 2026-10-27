@@ -76,7 +76,7 @@
   --radius: 10px;
   --radius-sm: 6px;
   /* Typography — font-family custom properties */
-  --font-heading: 'Google Sans Flex', 'Google Sans', sans-serif;
+  --font-heading: 'DM Sans', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-family: var(--font-body);
